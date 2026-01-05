@@ -1,1 +1,11 @@
-This is a test document for my AI knowledge system.
+This project includes an ingestion pipeline designed to prepare documents for semantic search and retrieval. The ingestion system is responsible for taking raw text files, cleaning them, splitting them into chunks, converting them into embeddings, and storing them in Pinecone so they can be searched intelligently later.
+
+First, the pipeline loads all supported documents from the data folder. It currently supports .txt and .md files. Each document is read from disk, its text is normalized by removing unnecessary newlines and extra spaces, and then prepared for further processing.
+
+Next, the text is split into smaller overlapping chunks. This is important because large documents are difficult for AI models to process effectively. By chunking the text, the system allows Pinecone to search smaller, meaningful pieces of information instead of entire files. Each chunk is also tagged with metadata, including which file it came from and its chunk index within that file.
+
+After chunking, the pipeline generates embeddings using the OpenAI text-embedding-3-small model. Each chunk of text is transformed into a 1536-dimensional vector representation that captures its meaning rather than just the words.
+
+Finally, these embeddings are uploaded into Pinecone. The pipeline ensures the Pinecone index exists, creates it if needed, and uploads vectors in batches. Each stored chunk includes metadata such as the original filename and its chunk index, enabling better retrieval, deduplication, and source tracking later when answering questions.
+
+Overall, the ingestion pipeline takes raw documents, processes them, converts them to embeddings, and stores them in a vector database so they can later be retrieved by meaning, not just keywords.

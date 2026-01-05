@@ -12,7 +12,7 @@ from math import ceil
 
 from ingestion.load_docs import load_text_files
 from ingestion.chunk import chunk_text
-from embeddings.embed import get_embedding
+from core.embeddings import embed_texts
 from core.config import PINECONE_API_KEY
 from pinecone import Pinecone
 
@@ -70,23 +70,44 @@ def main() -> None:
     docs = load_text_files()
     logger.info(f"Documents loaded: {len(docs)}")
 
-    # Chunk documents
-    logger.info("Chunking documents...")
-    all_chunks = []
-    for doc in docs:
-        all_chunks.extend(chunk_text(doc["text"]))
-    logger.info(f"Total chunks generated: {len(all_chunks)}")
+    # Chunk documents and prepare metadata
+    logger.info("Chunking documents and preparing metadata...")
+    chunks_with_meta = []
+    chunk_id = 0
 
-    # Create embeddings
+    for doc in docs:
+        chunks = chunk_text(doc["text"])
+
+        for idx, chunk in enumerate(chunks):
+            chunks_with_meta.append({
+                "id": str(chunk_id),
+                "chunk": chunk,
+                "source": doc["filename"],   
+                "chunk_index": idx           #index within this document
+            })
+            chunk_id += 1
+
+    logger.info(f"Total chunks generated: {len(chunks_with_meta)}")
+
+    # Generate embeddings
     logger.info("Generating embeddings...")
-    embeddings = [get_embedding(chunk) for chunk in all_chunks]
+    embeddings = embed_texts([c["chunk"] for c in chunks_with_meta])
     logger.info("Embeddings created successfully.")
 
-    # Prepare vectors for Pinecone
+    # Prepare Pinecone vectors
     logger.info("Uploading to Pinecone...")
+
     vectors = [
-        (str(i), emb, {"text": chunk})
-        for i, (emb, chunk) in enumerate(zip(embeddings, all_chunks))
+        (
+            c["id"],
+            emb,
+            {
+                "text": c["chunk"],
+                "source": c["source"],
+                "chunk_index": c["chunk_index"]
+            }
+        )
+        for c, emb in zip(chunks_with_meta, embeddings)
     ]
 
     # Upload in batches
