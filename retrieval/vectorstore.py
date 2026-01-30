@@ -30,7 +30,7 @@ class VectorStoreClient:
         Args:
             vector (List[float]): Embedding vector of the query.
             top_k (int): Number of results to return.
-            metadata_filter (Optional[Dict[str, Any]]): Optional Pinecone metadata filter.
+            metadata_filter ([Dict[str, Any]): Optional Pinecone metadata filter.
 
         Returns:
             List[Chunk]: List of Chunk objects.

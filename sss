@@ -1,0 +1,208 @@
+[1mdiff --git a/build_index.py b/build_index.py[m
+[1mindex 82cab34..477b2e6 100644[m
+[1m--- a/build_index.py[m
+[1m+++ b/build_index.py[m
+[36m@@ -7,6 +7,8 @@[m [mBuild the Pinecone vector index by:[m
+ 4) Uploading vectors to Pinecone[m
+ """[m
+ [m
+[32m+[m[32mimport os[m
+[32m+[m
+ import logging[m
+ from math import ceil[m
+ [m
+[36m@@ -24,6 +26,9 @@[m [mlogging.basicConfig([m
+ )[m
+ logger = logging.getLogger(__name__)[m
+ [m
+[32m+[m[32m# Chunking parameters[m
+[32m+[m[32mCHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))[m
+[32m+[m[32mCHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "80"))[m
+ [m
+ # Pinecone index configuration[m
+ INDEX_NAME = "ai-knowledge-base"[m
+[36m@@ -57,6 +62,10 @@[m [mdef ensure_index(pc: Pinecone ) -> None:[m
+ [m
+ def main() -> None:[m
+     """Run the full index build pipeline."""[m
+[32m+[m
+[32m+[m[32m    logger.info(f"Chunking config: chunk_size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP}")[m
+[32m+[m
+[32m+[m[32m    logger.info(f"Using Pinecone index: {INDEX_NAME}")[m
+     [m
+     # Initialize Pinecone client[m
+     pc = Pinecone(api_key=PINECONE_API_KEY)[m
+[36m@@ -76,7 +85,7 @@[m [mdef main() -> None:[m
+     chunk_id = 0[m
+ [m
+     for doc in docs:[m
+[31m-        chunks = chunk_text(doc["text"])[m
+[32m+[m[32m        chunks = chunk_text(doc["text"], chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)[m
+ [m
+         for idx, chunk in enumerate(chunks):[m
+             chunks_with_meta.append({[m
+[1mdiff --git a/core/embeddings.py b/core/embeddings.py[m
+[1mindex 5d8ac1e..0680c16 100644[m
+[1m--- a/core/embeddings.py[m
+[1m+++ b/core/embeddings.py[m
+[36m@@ -16,10 +16,10 @@[m [mdef embed_texts(texts: List[str]) -> List[List[float]]:[m
+     Embed a batch of texts.[m
+ [m
+     Args:[m
+[31m-        texts: List of text strings.[m
+[32m+[m[32m        texts (List[str]): List of text strings.[m
+ [m
+     Returns:[m
+[31m-        List of embedding vectors, one per text.[m
+[32m+[m[32m        List[List[float]]: List of embedding vectors, one per text.[m
+     """[m
+     resp = client.embeddings.create([m
+         model=EMBEDDING_MODEL,[m
+[36m@@ -34,9 +34,9 @@[m [mdef embed_query(query: str) -> List[float]:[m
+     Embed a single query string.[m
+ [m
+     Args:[m
+[31m-        query: The query text.[m
+[32m+[m[32m        query (str): The query text.[m
+ [m
+     Returns:[m
+[31m-        The embedding vector for the query.[m
+[32m+[m[32m        List[float]: The embedding vector for the query.[m
+     """[m
+     return embed_texts([query])[0][m
+[1mdiff --git a/data/test.txt b/data/test.txt[m
+[1mdeleted file mode 100644[m
+[1mindex a1a5776..0000000[m
+[1m--- a/data/test.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,11 +0,0 @@[m
+[31m-This project includes an ingestion pipeline designed to prepare documents for semantic search and retrieval. The ingestion system is responsible for taking raw text files, cleaning them, splitting them into chunks, converting them into embeddings, and storing them in Pinecone so they can be searched intelligently later.[m
+[31m-[m
+[31m-First, the pipeline loads all supported documents from the data folder. It currently supports .txt and .md files. Each document is read from disk, its text is normalized by removing unnecessary newlines and extra spaces, and then prepared for further processing.[m
+[31m-[m
+[31m-Next, the text is split into smaller overlapping chunks. This is important because large documents are difficult for AI models to process effectively. By chunking the text, the system allows Pinecone to search smaller, meaningful pieces of information instead of entire files. Each chunk is also tagged with metadata, including which file it came from and its chunk index within that file.[m
+[31m-[m
+[31m-After chunking, the pipeline generates embeddings using the OpenAI text-embedding-3-small model. Each chunk of text is transformed into a 1536-dimensional vector representation that captures its meaning rather than just the words.[m
+[31m-[m
+[31m-Finally, these embeddings are uploaded into Pinecone. The pipeline ensures the Pinecone index exists, creates it if needed, and uploads vectors in batches. Each stored chunk includes metadata such as the original filename and its chunk index, enabling better retrieval, deduplication, and source tracking later when answering questions.[m
+[31m-[m
+[31m-Overall, the ingestion pipeline takes raw documents, processes them, converts them to embeddings, and stores them in a vector database so they can later be retrieved by meaning, not just keywords.[m
+[1mdiff --git a/main.py b/main.py[m
+[1mindex f887245..5b46118 100644[m
+[1m--- a/main.py[m
+[1m+++ b/main.py[m
+[36m@@ -10,7 +10,11 @@[m [mThis service retrieves knowledge chunks from Pinecone, constructs context,[m
+ and uses OpenAI to generate answers based on ingested documents.[m
+ """[m
+ [m
+[31m-from fastapi import FastAPI, HTTPException[m
+[32m+[m[32mfrom fastapi import FastAPI, HTTPException, Request[m
+[32m+[m[32mfrom app.middleware.request_id import request_id_middleware[m
+[32m+[m[32mfrom app.errors import UpstreamServiceError[m
+[32m+[m[32mfrom fastapi.responses import JSONResponse[m
+[32m+[m
+ from pydantic import BaseModel[m
+ from typing import List, Optional[m
+ import logging[m
+[36m@@ -41,6 +45,35 @@[m [mFeatures:[m
+ """,[m
+     version="1.0.0"[m
+ )[m
+[32m+[m
+[32m+[m[32m#register middleware[m
+[32m+[m[32mapp.middleware("http")(request_id_middleware)[m
+[32m+[m
+[32m+[m[32m# Exception handlers for upstream service errors[m
+[32m+[m[32m@app.exception_handler(UpstreamServiceError)[m
+[32m+[m[32masync def upstream_error_handler(request: Request, exc: UpstreamServiceError) -> JSONResponse:[m
+[32m+[m[32m    """[m
+[32m+[m[32m    Handle UpstreamServiceError exceptions.[m
+[32m+[m[32m    Args:[m
+[32m+[m[32m        request (Request): Incoming HTTP request.[m
+[32m+[m[32m        exc (UpstreamServiceError): The raised exception.[m
+[32m+[m[32m    Returns:[m
+[32m+[m[32m        JSONResponse: HTTP response with error details.[m
+[32m+[m[32m    """[m
+[32m+[m
+[32m+[m[32m    # Retrieve request ID from request state[m
+[32m+[m[32m    request_id = getattr(request.state, "request_id", None)[m
+[32m+[m
+[32m+[m[32m    return JSONResponse([m
+[32m+[m[32m        status_code=503,[m
+[32m+[m[32m        content={[m
+[32m+[m[32m            "error": str(exc),[m
+[32m+[m[32m            "service": exc.service,[m
+[32m+[m[32m            "request_id": request_id,[m
+[32m+[m[32m        },[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m
+ retriever = SemanticRetriever()[m
+ client = OpenAI(api_key=OPENAI_API_KEY)[m
+ [m
+[36m@@ -149,7 +182,9 @@[m [mdef semantic_search(req: SearchRequest):[m
+         ][m
+ [m
+         return SearchResponse(query=req.query, results=chunks)[m
+[31m-[m
+[32m+[m[41m    [m
+[32m+[m[32m    except UpstreamServiceError:[m
+[32m+[m[32m        raise  # Let the exception handler deal with it[m
+     except Exception as e:[m
+         logger.exception("Search failed")[m
+         raise HTTPException(status_code=500, detail=str(e))[m
+[36m@@ -231,7 +266,8 @@[m [mANSWER:[m
+             answer=answer,[m
+             sources=sources[m
+         )[m
+[31m-[m
+[32m+[m[32m    except UpstreamServiceError:[m
+[32m+[m[32m        raise  # Let the exception handler deal with it[m
+     except Exception as e:[m
+         logger.exception("RAG answer failed")[m
+         raise HTTPException(status_code=500, detail=str(e))[m
+[1mdiff --git a/retrieval/retriever.py b/retrieval/retriever.py[m
+[1mindex 03a49c1..f78739b 100644[m
+[1m--- a/retrieval/retriever.py[m
+[1m+++ b/retrieval/retriever.py[m
+[36m@@ -25,7 +25,7 @@[m [mclass SemanticRetriever:[m
+         self,[m
+         query: str,[m
+         top_k: int = 8,[m
+[31m-        score_threshold: Optional[float] = None,[m
+[32m+[m[32m        score_threshold: Optional[float] = 0.3,[m
+         metadata_filter: Optional[Dict[str, Any]] = None,[m
+     ) -> SearchResult:[m
+         """[m
+[1mdiff --git a/retrieval/vectorstore.py b/retrieval/vectorstore.py[m
+[1mindex 4534975..9ae277b 100644[m
+[1m--- a/retrieval/vectorstore.py[m
+[1m+++ b/retrieval/vectorstore.py[m
+[36m@@ -30,7 +30,7 @@[m [mclass VectorStoreClient:[m
+         Args:[m
+             vector (List[float]): Embedding vector of the query.[m
+             top_k (int): Number of results to return.[m
+[31m-            metadata_filter (Optional[Dict[str, Any]]): Optional Pinecone metadata filter.[m
+[32m+[m[32m            metadata_filter ([Dict[str, Any]): Optional Pinecone metadata filter.[m
+ [m
+         Returns:[m
+             List[Chunk]: List of Chunk objects.[m
+[1mdiff --git a/test_script.py b/test_script.py[m
+[1mdeleted file mode 100644[m
+[1mindex 17c2789..0000000[m
+[1m--- a/test_script.py[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-from retrieval.retriever import SemanticRetriever[m
+[31m-[m
+[31m-r = SemanticRetriever()[m
+[31m-result = r.retrieve("What does my ingestion pipeline do?", top_k=5)[m
+[31m-[m
+[31m-print("running tests...")[m
+[31m-print("len(result.chunks):", len(result.chunks))[m
+[31m-for c in result.chunks:[m
+[31m-    print("SCORE:", c.score)[m
+[31m-    print("SOURCE:", c.metadata.get("source"))[m
+[31m-    print("CHUNK:", c.text[:200])[m
+[31m-    print("----")[m
+\ No newline at end of file[m

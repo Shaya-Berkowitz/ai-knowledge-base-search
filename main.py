@@ -10,7 +10,11 @@ This service retrieves knowledge chunks from Pinecone, constructs context,
 and uses OpenAI to generate answers based on ingested documents.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from app.middleware.request_id import request_id_middleware
+from app.errors import UpstreamServiceError
+from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
@@ -41,6 +45,35 @@ Features:
 """,
     version="1.0.0"
 )
+
+#register middleware
+app.middleware("http")(request_id_middleware)
+
+# Exception handlers for upstream service errors
+@app.exception_handler(UpstreamServiceError)
+async def upstream_error_handler(request: Request, exc: UpstreamServiceError) -> JSONResponse:
+    """
+    Handle UpstreamServiceError exceptions.
+    Args:
+        request (Request): Incoming HTTP request.
+        exc (UpstreamServiceError): The raised exception.
+    Returns:
+        JSONResponse: HTTP response with error details.
+    """
+
+    # Retrieve request ID from request state
+    request_id = getattr(request.state, "request_id", None)
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": str(exc),
+            "service": exc.service,
+            "request_id": request_id,
+        },
+    )
+
+
 retriever = SemanticRetriever()
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -149,7 +182,9 @@ def semantic_search(req: SearchRequest):
         ]
 
         return SearchResponse(query=req.query, results=chunks)
-
+    
+    except UpstreamServiceError:
+        raise  # Let the exception handler deal with it
     except Exception as e:
         logger.exception("Search failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -231,7 +266,8 @@ ANSWER:
             answer=answer,
             sources=sources
         )
-
+    except UpstreamServiceError:
+        raise  # Let the exception handler deal with it
     except Exception as e:
         logger.exception("RAG answer failed")
         raise HTTPException(status_code=500, detail=str(e))

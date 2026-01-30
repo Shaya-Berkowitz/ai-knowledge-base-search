@@ -7,6 +7,8 @@ Build the Pinecone vector index by:
 4) Uploading vectors to Pinecone
 """
 
+import os
+
 import logging
 from math import ceil
 
@@ -24,6 +26,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Chunking parameters
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "80"))
 
 # Pinecone index configuration
 INDEX_NAME = "ai-knowledge-base"
@@ -57,6 +62,10 @@ def ensure_index(pc: Pinecone ) -> None:
 
 def main() -> None:
     """Run the full index build pipeline."""
+
+    logger.info(f"Chunking config: chunk_size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP}")
+
+    logger.info(f"Using Pinecone index: {INDEX_NAME}")
     
     # Initialize Pinecone client
     pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -76,7 +85,7 @@ def main() -> None:
     chunk_id = 0
 
     for doc in docs:
-        chunks = chunk_text(doc["text"])
+        chunks = chunk_text(doc["text"], chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
 
         for idx, chunk in enumerate(chunks):
             chunks_with_meta.append({

@@ -25,7 +25,7 @@ class SemanticRetriever:
         self,
         query: str,
         top_k: int = 8,
-        score_threshold: Optional[float] = None,
+        score_threshold: Optional[float] = 0.3,
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> SearchResult:
         """

@@ -1,0 +1,29 @@
+API Runtime Behavior
+
+The API is implemented using FastAPI and exposes endpoints for semantic retrieval and
+full RAG-based question answering.
+
+Each incoming HTTP request is assigned a unique request ID. This request ID is stored
+on the request context and returned to the client in the response headers. Request IDs
+are used to correlate logs and error responses during debugging.
+
+Error Handling
+
+The API includes basic error handling to ensure that failures do not crash the service.
+If an unexpected error occurs during request processing, the API returns a 500 Internal
+Server Error response.
+
+Upstream Service Errors
+
+The API depends on external services such as OpenAI and Pinecone for embedding generation
+and vector retrieval. Failures in these upstream services may result in request errors.
+These errors are treated as internal failures and return a 500 Internal Server Error
+response to the client.
+
+Errors are logged on the server, but stack traces and internal implementation details
+are not exposed to the client.
+
+Health Check
+
+The API exposes a /health endpoint that returns a simple status message indicating whether
+the service is running.

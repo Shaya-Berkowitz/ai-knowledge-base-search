@@ -16,10 +16,10 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     Embed a batch of texts.
 
     Args:
-        texts: List of text strings.
+        texts (List[str]): List of text strings.
 
     Returns:
-        List of embedding vectors, one per text.
+        List[List[float]]: List of embedding vectors, one per text.
     """
     resp = client.embeddings.create(
         model=EMBEDDING_MODEL,
@@ -34,9 +34,9 @@ def embed_query(query: str) -> List[float]:
     Embed a single query string.
 
     Args:
-        query: The query text.
+        query (str): The query text.
 
     Returns:
-        The embedding vector for the query.
+        List[float]: The embedding vector for the query.
     """
     return embed_texts([query])[0]

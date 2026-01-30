@@ -1,0 +1,31 @@
+System Architecture Overview
+
+This AI knowledge system is implemented as a Retrieval-Augmented Generation (RAG) service.
+The system is organized into three primary stages: ingestion, retrieval, and generation.
+
+Ingestion Pipeline
+
+During ingestion, source documents are loaded from disk and split into overlapping text
+chunks. Chunking is used to ensure that semantically related information remains grouped
+while still allowing fine-grained retrieval.
+
+Each chunk is converted into a vector embedding using OpenAI’s text-embedding-3-small model.
+Embeddings are numerical representations that capture semantic meaning.
+
+The resulting embeddings are stored in Pinecone, a managed vector database designed for
+efficient similarity search. Each stored vector includes metadata such as the source
+document name and the chunk index.
+
+Retrieval Stage
+
+At query time, the user’s query is embedded using the same embedding model used during
+ingestion. This ensures that query embeddings and stored document embeddings are compatible.
+
+The query embedding is sent to Pinecone, which performs a similarity search using cosine
+similarity. The system retrieves the top-k most relevant chunks based on similarity score.
+
+Generation Stage
+
+Retrieved chunks are assembled into a context block that is passed to OpenAI’s language
+model along with the user’s question. The model is instructed to answer using only the
+provided context.
