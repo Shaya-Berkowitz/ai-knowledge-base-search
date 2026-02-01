@@ -56,16 +56,16 @@ class SemanticRetriever:
         # Optional score filtering
         filtered = []
         for c in raw_chunks:
-            if score_threshold is None or c.score is None:
+            if score_threshold is None or c.similarity_score is None:
                 filtered.append(c)
-            elif c.score >= score_threshold:
+            elif c.similarity_score >= score_threshold:
                 filtered.append(c)
 
         # Delete duplicates if present
         deduplicated = self.deduplicate(filtered)
 
         # Sort strongest to weakest
-        deduplicated.sort(key=lambda c: c.score or 0, reverse=True)
+        deduplicated.sort(key=lambda c: c.similarity_score or 0, reverse=True)
 
         # Truncate to requested size
         final = deduplicated[:top_k]

@@ -23,6 +23,10 @@ from retrieval.retriever import SemanticRetriever
 from openai import OpenAI
 from core.config import OPENAI_API_KEY
 
+from core.db import Base, engine
+import core.models
+
+
 
 # Logging setup
 logging.basicConfig(
@@ -30,6 +34,11 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+logger.info("Database tables created or verified.")
 
 # Initialize FastAPI app and components
 app = FastAPI(
@@ -109,14 +118,16 @@ class ChunkResponse(BaseModel):
     Response model for a retrieved chunk.
 
     Attributes:
+        chunk_id (str): Unique identifier for the chunk.
         text (str): Chunk text content.
         source (str, optional): Source document identifier.
         score (float, optional): Similarity score.
         chunk_index (int, optional): Index of the chunk in the source document.
     """
+    chunk_id: str
     text: str
     source: Optional[str] = None
-    score: Optional[float] = None
+    similarity_score: Optional[float] = None
     chunk_index: Optional[int] = None
 
 
@@ -173,9 +184,10 @@ def semantic_search(req: SearchRequest):
         # Build response
         chunks = [
             ChunkResponse(
+                chunk_id=c.id,
                 text=c.text,
                 source=c.metadata.get("source"),
-                score=c.score,
+                similarity_score=c.similarity_score,
                 chunk_index=c.metadata.get("chunk_index")
             )
             for c in result.chunks
@@ -225,10 +237,11 @@ def rag_answer(req: RagRequest):
         for c in result.chunks:
             sources.append(
                 ChunkResponse(
+                    chunk_id=c.chunk_id,
                     text=c.text,
-                    source=c.metadata.get("source"),
-                    score=c.score,
-                    chunk_index=c.metadata.get("chunk_index")
+                    source=c.metadata.get("source", ""),
+                    similarity_score=c.similarity_score,
+                    chunk_index=c.metadata.get("chunk_index", -1)
                 )
             )
 

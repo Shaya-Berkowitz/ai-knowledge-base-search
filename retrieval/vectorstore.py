@@ -54,7 +54,7 @@ class VectorStoreClient:
                     id=match.id,
                     text=md.get("text", ""),
                     metadata=md,
-                    score=match.score
+                    similarity_score=match.score
                 )
             )
 

@@ -14,13 +14,13 @@ class Chunk:
         id (str): Unique identifier for the chunk.
         text (str): The text content of the chunk.
         metadata (Dict[str, Any]): Additional metadata associated with the chunk.
-        score (Optional[float]): Semantic similarity score returned during retrieval.
+        similarity_score (Optional[float]): Semantic similarity score returned during retrieval.
                                  Before retrieval, this is None.
     """
     id: str
     text: str
     metadata: Dict[str, Any]
-    score: Optional[float] = None
+    similarity_score: Optional[float] = None
 
 
 @dataclass
